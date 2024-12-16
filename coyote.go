@@ -2,6 +2,7 @@ package tlslistener
 
 import (
 	"crypto/tls"
+	"crypto/x509"
 	"fmt"
 	"net"
 	"sync"
@@ -132,14 +133,84 @@ func (tl *TLSListener) Addr() net.Addr {
 	return tl.listener.Addr()
 }
 
+// certInfo holds certificate timing information
+type certInfo struct {
+	NotBefore time.Time
+	NotAfter  time.Time
+}
+
+// getCertInfo extracts timing information from the current certificate
+func (tl *TLSListener) getCertInfo() (*certInfo, error) {
+	tl.mu.RLock()
+	manager := tl.certManager
+	tl.mu.RUnlock()
+
+	if manager == nil {
+		return nil, errors.New("cert manager is not initialized")
+	}
+
+	// Get current certificate
+	cert, err := manager.GetCertificate(&tls.ClientHelloInfo{
+		ServerName: tl.domain,
+	})
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to get current certificate")
+	}
+
+	// Extract leaf certificate
+	leaf, err := x509.ParseCertificate(cert.Certificate[0])
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to parse certificate")
+	}
+
+	return &certInfo{
+		NotBefore: leaf.NotBefore,
+		NotAfter:  leaf.NotAfter,
+	}, nil
+}
+
+// shouldRenew checks if the certificate should be renewed
+func (tl *TLSListener) shouldRenew() (bool, error) {
+	info, err := tl.getCertInfo()
+	if err != nil {
+		return false, err
+	}
+
+	now := time.Now()
+
+	// Check if it's been at least 2 months since the last renewal
+	twoMonthsAgo := now.AddDate(0, -2, 0)
+	if info.NotBefore.After(twoMonthsAgo) {
+		return false, nil
+	}
+
+	// As a safety check, also renew if we're within 30 days of expiration
+	thirtyDaysFromNow := now.AddDate(0, 0, 30)
+	if thirtyDaysFromNow.After(info.NotAfter) {
+		return true, nil
+	}
+
+	return true, nil
+}
+
 // renewalRoutine handles periodic certificate renewal checks
 func (tl *TLSListener) renewalRoutine() {
-	ticker := time.NewTicker(2 * 30 * 24 * time.Hour) // ~2 months
+	ticker := time.NewTicker(24 * time.Hour) // Check daily
 	defer ticker.Stop()
 
 	for range ticker.C {
-		if err := tl.renewCertificates(); err != nil {
-			fmt.Printf("Failed to renew certificates: %v\n", err)
+		shouldRenew, err := tl.shouldRenew()
+		if err != nil {
+			logf("Failed to check certificate renewal status: %v", err)
+			continue
+		}
+
+		if shouldRenew {
+			if err := tl.renewCertificates(); err != nil {
+				logf("Failed to renew certificates: %v", err)
+			} else {
+				logf("Successfully renewed certificates for %s", tl.domain)
+			}
 		}
 	}
 }
@@ -160,4 +231,10 @@ func (tl *TLSListener) renewCertificates() error {
 	})
 
 	return err
+}
+
+// logf is a helper function for logging
+// In production, you might want to replace this with a proper logger
+func logf(format string, args ...interface{}) {
+	fmt.Printf(format+"\n", args...)
 }
