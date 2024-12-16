@@ -12,6 +12,11 @@ import (
 	"golang.org/x/crypto/acme/autocert"
 )
 
+/**
+ * wileedot(wile e.) is a net.Listener implementation with automatic TLS support via ACME/Let's Encrypt.
+ * it is named for ACME's most famous customer, wile e. coyote, super genius.
+ */
+
 type TLSListener struct {
 	mu             sync.RWMutex
 	listener       net.Listener
