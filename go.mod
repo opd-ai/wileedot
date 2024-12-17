@@ -1,4 +1,4 @@
-module github.com/opd-ai/wiledote
+module github.com/opd-ai/wileedot
 
 go 1.21.3
 

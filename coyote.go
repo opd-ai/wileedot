@@ -39,6 +39,8 @@ type Config struct {
 	// BaseListener is an optional existing listener to wrap with TLS
 	// If nil, a new TCP listener on :443 will be created
 	BaseListener net.Listener
+
+	//DNSProvider autocert.DNS01Provider
 }
 
 // New creates a new TLSListener with the given configuration

@@ -111,7 +111,7 @@ log.Printf("Certificate valid from %v to %v",
 
 - Go 1.16 or higher
 - Write access to the certificate directory
-- Port 80 accessible for ACME challenges
+- Port 80 accessible for ACME challenges(You may wish to use `setcap` in order to bind to port 80 without root)
 - Port 443 accessible for TLS (if using default listener)
 
 ## Important Notes
